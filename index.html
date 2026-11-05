@@ -1,0 +1,759 @@
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SICHUAN MAHJONG</title>
+
+<style>
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: #e8d6b5;
+  color: #78251d;
+  font-family: Georgia, serif;
+  display: flex;
+  justify-content: center;
+  padding: 25px 10px;
+}
+
+.container {
+  width: 100%;
+  max-width: 850px;
+  padding: 25px;
+  background: #f8efd9;
+  border: 6px double #a52b22;
+  box-shadow: 0 8px 25px #69452b55;
+  text-align: center;
+}
+
+.subtitle {
+  color: #a77b37;
+  letter-spacing: 4px;
+  font-size: 12px;
+}
+
+h1 {
+  color: #a52b22;
+  font-size: clamp(28px, 6vw, 45px);
+  margin: 12px 0;
+}
+
+.description {
+  font-size: 12px;
+  letter-spacing: 2px;
+}
+
+.info {
+  display: flex;
+  gap: 10px;
+  margin: 25px 0 18px;
+}
+
+.info div {
+  flex: 1;
+  padding: 12px 5px;
+  background: #ead8b5;
+  border: 1px solid #b58a45;
+}
+
+.info span {
+  display: block;
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+
+.info strong {
+  font-size: 22px;
+}
+
+.board-wrap {
+  padding: 12px;
+  background: #a52b22;
+  border: 5px double #e0bd75;
+  overflow-x: auto;
+}
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 5px;
+  min-width: 300px;
+}
+
+.tile {
+  aspect-ratio: 1;
+  background: #fff4dc;
+  border: 1px solid #b58a45;
+  border-radius: 5px;
+  color: #a52b22;
+  font-size: clamp(17px, 4vw, 30px);
+  font-weight: bold;
+  cursor: pointer;
+  box-shadow: 0 3px 0 #c4a36c;
+  transition: 0.15s;
+}
+
+.tile:hover {
+  background: #f1ddb5;
+  transform: translateY(-2px);
+}
+
+.tile.selected {
+  background: #e9bd63;
+  outline: 3px solid #fff1c5;
+}
+
+.tile.empty {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.tile.hinted {
+  background: #f5c75e;
+  outline: 3px solid #fff;
+}
+
+.controls {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+button {
+  padding: 12px 20px;
+  background: #a52b22;
+  color: #fff4dc;
+  border: 1px solid #792019;
+  cursor: pointer;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+button:hover {
+  background: #792019;
+}
+
+.message {
+  min-height: 25px;
+  margin-top: 20px;
+  font-weight: bold;
+}
+
+footer {
+  margin-top: 25px;
+  color: #a77b37;
+  font-size: 10px;
+  letter-spacing: 2px;
+}
+
+@media(max-width: 500px) {
+  .container {
+    padding: 15px 8px;
+  }
+
+  .board-wrap {
+    padding: 7px;
+  }
+
+  .board {
+    gap: 3px;
+  }
+
+  button {
+    padding: 10px 12px;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<main class="container">
+
+  <p class="subtitle">CHINESE RETRO PUZZLE GAME</p>
+  <h1>SICHUAN MAHJONG</h1>
+  <p class="description">FIND THE SAME TILES & CONNECT THEM</p>
+
+  <section class="info">
+    <div>
+      <span>TIME</span>
+      <strong id="timer">03:00</strong>
+    </div>
+    <div>
+      <span>REMAINING</span>
+      <strong id="remaining">48</strong>
+    </div>
+    <div>
+      <span>SCORE</span>
+      <strong id="score">0</strong>
+    </div>
+  </section>
+
+  <div class="board-wrap">
+    <div id="board" class="board"></div>
+  </div>
+
+  <div class="controls">
+    <button id="hint">HINT</button>
+    <button id="shuffle">SHUFFLE</button>
+    <button id="restart">RESTART</button>
+  </div>
+
+  <p id="message" class="message">
+    같은 그림의 패 두 개를 찾아 연결하세요!
+  </p>
+
+  <footer>
+    MADE WITH CHINESE RETRO DESIGN
+  </footer>
+
+</main>
+
+<script>
+// =============================
+// 게임 기본 설정
+// =============================
+
+const ROWS = 6;
+const COLS = 8;
+const TIME_LIMIT = 180;
+
+const symbols = [
+  "🀇", "🀈", "🀉", "🀊",
+  "🀋", "🀌", "🀍", "🀎",
+  "🀏", "🀐", "🀑", "🀒",
+  "🀓", "🀔", "🀕", "🀖",
+  "🀗", "🀘", "🀙", "🀚",
+  "🀛", "🀜", "🀝", "🀞"
+];
+
+let board = [];
+let selected = null;
+let score = 0;
+let timeLeft = TIME_LIMIT;
+let timerInterval = null;
+let active = false;
+
+const boardElement = document.getElementById("board");
+const timerElement = document.getElementById("timer");
+const remainingElement = document.getElementById("remaining");
+const scoreElement = document.getElementById("score");
+const messageElement = document.getElementById("message");
+
+
+// =============================
+// 배열 섞기
+// =============================
+
+function shuffleArray(array) {
+  const result = [...array];
+
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+
+    [result[i], result[j]] =
+      [result[j], result[i]];
+  }
+
+  return result;
+}
+
+
+// =============================
+// 보드 생성
+// =============================
+
+function createBoard() {
+
+  const total = ROWS * COLS;
+  const pairs = total / 2;
+
+  const selectedSymbols =
+    shuffleArray(symbols).slice(0, pairs);
+
+  let tiles = [];
+
+  selectedSymbols.forEach(symbol => {
+    tiles.push(symbol, symbol);
+  });
+
+  tiles = shuffleArray(tiles);
+
+  board = [];
+
+  for (let r = 0; r < ROWS + 2; r++) {
+
+    board[r] = [];
+
+    for (let c = 0; c < COLS + 2; c++) {
+
+      if (
+        r === 0 ||
+        c === 0 ||
+        r === ROWS + 1 ||
+        c === COLS + 1
+      ) {
+        board[r][c] = null;
+      } else {
+        board[r][c] =
+          tiles[(r - 1) * COLS + (c - 1)];
+      }
+    }
+  }
+}
+
+
+// =============================
+// 화면 출력
+// =============================
+
+function renderBoard() {
+
+  boardElement.innerHTML = "";
+
+  for (let r = 1; r <= ROWS; r++) {
+
+    for (let c = 1; c <= COLS; c++) {
+
+      const button = document.createElement("button");
+
+      button.className = "tile";
+
+      const value = board[r][c];
+
+      if (value === null) {
+
+        button.classList.add("empty");
+        button.disabled = true;
+
+      } else {
+
+        button.textContent = value;
+
+        button.addEventListener("click", () => {
+          selectTile(r, c);
+        });
+      }
+
+      if (
+        selected &&
+        selected.r === r &&
+        selected.c === c
+      ) {
+        button.classList.add("selected");
+      }
+
+      boardElement.appendChild(button);
+    }
+  }
+
+  updateInfo();
+}
+
+
+// =============================
+// 정보 업데이트
+// =============================
+
+function updateInfo() {
+
+  let remaining = 0;
+
+  for (let r = 1; r <= ROWS; r++) {
+    for (let c = 1; c <= COLS; c++) {
+
+      if (board[r][c] !== null) {
+        remaining++;
+      }
+    }
+  }
+
+  remainingElement.textContent = remaining;
+  scoreElement.textContent = score;
+}
+
+
+// =============================
+// 타일 선택
+// =============================
+
+function selectTile(r, c) {
+
+  if (!active || board[r][c] === null) return;
+
+  if (!selected) {
+
+    selected = { r, c };
+    renderBoard();
+    return;
+  }
+
+  if (selected.r === r && selected.c === c) {
+
+    selected = null;
+    renderBoard();
+    return;
+  }
+
+  const first = selected;
+  const second = { r, c };
+
+  if (
+    board[first.r][first.c] === board[r][c] &&
+    canConnect(first, second)
+  ) {
+
+    board[first.r][first.c] = null;
+    board[r][c] = null;
+
+    score += 10;
+
+    messageElement.textContent = "연결 성공! +10점";
+
+    selected = null;
+
+    renderBoard();
+
+    if (checkClear()) {
+      endGame(true);
+    }
+
+  } else {
+
+    selected = second;
+
+    messageElement.textContent =
+      "연결할 수 없는 패입니다. 다시 시도하세요!";
+
+    renderBoard();
+  }
+}
+
+
+// =============================
+// 사천성 연결 경로 판정
+// 최대 2번 꺾기
+// =============================
+
+function canConnect(start, end) {
+
+  const directions = [
+    [0, 1],
+    [0, -1],
+    [1, 0],
+    [-1, 0]
+  ];
+
+  const queue = [];
+
+  const visited = new Set();
+
+  for (let d = 0; d < 4; d++) {
+
+    const state = {
+      r: start.r,
+      c: start.c,
+      dir: d,
+      turns: 0
+    };
+
+    queue.push(state);
+  }
+
+  while (queue.length > 0) {
+
+    const current = queue.shift();
+
+    const key =
+      `${current.r},${current.c},${current.dir},${current.turns}`;
+
+    if (visited.has(key)) continue;
+
+    visited.add(key);
+
+    const [dr, dc] = directions[current.dir];
+
+    const nr = current.r + dr;
+    const nc = current.c + dc;
+
+    if (
+      nr < 0 ||
+      nr >= ROWS + 2 ||
+      nc < 0 ||
+      nc >= COLS + 2
+    ) continue;
+
+    if (nr === end.r && nc === end.c) {
+      return true;
+    }
+
+    if (board[nr][nc] !== null) continue;
+
+    queue.push({
+      r: nr,
+      c: nc,
+      dir: current.dir,
+      turns: current.turns
+    });
+
+    if (current.turns < 2) {
+
+      for (let nd = 0; nd < 4; nd++) {
+
+        if (nd === current.dir) continue;
+
+        const nextKey =
+          `${nr},${nc},${nd},${current.turns + 1}`;
+
+        if (!visited.has(nextKey)) {
+
+          queue.push({
+            r: nr,
+            c: nc,
+            dir: nd,
+            turns: current.turns + 1
+          });
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+
+// =============================
+// 클리어 확인
+// =============================
+
+function checkClear() {
+
+  for (let r = 1; r <= ROWS; r++) {
+    for (let c = 1; c <= COLS; c++) {
+
+      if (board[r][c] !== null) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+
+// =============================
+// 남은 패 찾기
+// =============================
+
+function findHint() {
+
+  const tiles = [];
+
+  for (let r = 1; r <= ROWS; r++) {
+    for (let c = 1; c <= COLS; c++) {
+
+      if (board[r][c] !== null) {
+        tiles.push({ r, c });
+      }
+    }
+  }
+
+  for (let i = 0; i < tiles.length; i++) {
+
+    for (let j = i + 1; j < tiles.length; j++) {
+
+      const a = tiles[i];
+      const b = tiles[j];
+
+      if (
+        board[a.r][a.c] === board[b.r][b.c] &&
+        canConnect(a, b)
+      ) {
+        return [a, b];
+      }
+    }
+  }
+
+  return null;
+}
+
+
+// =============================
+// 힌트 기능
+// =============================
+
+document.getElementById("hint").onclick = () => {
+
+  if (!active) return;
+
+  const result = findHint();
+
+  if (!result) {
+
+    messageElement.textContent =
+      "가능한 조합이 없습니다. 셔플을 이용하세요.";
+
+    return;
+  }
+
+  selected = result[0];
+
+  renderBoard();
+
+  const buttons =
+    boardElement.querySelectorAll(".tile:not(.empty)");
+
+  buttons.forEach(button => {
+    button.classList.remove("hinted");
+  });
+
+  messageElement.textContent =
+    "같은 그림의 패를 찾아보세요!";
+};
+
+
+// =============================
+// 셔플 기능
+// =============================
+
+document.getElementById("shuffle").onclick = () => {
+
+  if (!active) return;
+
+  const tiles = [];
+
+  for (let r = 1; r <= ROWS; r++) {
+    for (let c = 1; c <= COLS; c++) {
+
+      if (board[r][c] !== null) {
+        tiles.push(board[r][c]);
+      }
+    }
+  }
+
+  const mixed = shuffleArray(tiles);
+
+  let index = 0;
+
+  for (let r = 1; r <= ROWS; r++) {
+    for (let c = 1; c <= COLS; c++) {
+
+      if (board[r][c] !== null) {
+        board[r][c] = mixed[index++];
+      }
+    }
+  }
+
+  selected = null;
+
+  renderBoard();
+
+  messageElement.textContent =
+    "패의 위치를 다시 섞었습니다!";
+};
+
+
+// =============================
+// 타이머
+// =============================
+
+function startTimer() {
+
+  clearInterval(timerInterval);
+
+  timerInterval = setInterval(() => {
+
+    if (!active) return;
+
+    timeLeft--;
+
+    const minutes =
+      String(Math.floor(timeLeft / 60)).padStart(2, "0");
+
+    const seconds =
+      String(timeLeft % 60).padStart(2, "0");
+
+    timerElement.textContent =
+      `${minutes}:${seconds}`;
+
+    if (timeLeft <= 0) {
+      endGame(false);
+    }
+
+  }, 1000);
+}
+
+
+// =============================
+// 게임 종료
+// =============================
+
+function endGame(won) {
+
+  active = false;
+
+  clearInterval(timerInterval);
+
+  if (won) {
+
+    messageElement.textContent =
+      `🎉 GAME CLEAR! 최종 점수: ${score}점`;
+
+  } else {
+
+    messageElement.textContent =
+      `TIME OVER! 최종 점수: ${score}점`;
+  }
+}
+
+
+// =============================
+// 게임 시작
+// =============================
+
+function startGame() {
+
+  clearInterval(timerInterval);
+
+  score = 0;
+  timeLeft = TIME_LIMIT;
+  selected = null;
+  active = true;
+
+  createBoard();
+
+  timerElement.textContent = "03:00";
+
+  messageElement.textContent =
+    "같은 그림의 패 두 개를 찾아 연결하세요!";
+
+  renderBoard();
+
+  startTimer();
+}
+
+
+// =============================
+// 다시 시작
+// =============================
+
+document.getElementById("restart").onclick = () => {
+  startGame();
+};
+
+
+// 최초 실행
+startGame();
+
+</script>
+
+</body>
+</html>
